@@ -1,0 +1,18 @@
+{
+  "sku": "CS-1001",
+  "name": "Sample Product Name",
+  "category_slug": "jewelry-accessories",
+  "slug": "sample-product-name",
+  "short_description": "Short summary for the product card.",
+  "description": "Full product description.",
+  "materials": "",
+  "dimensions": "",
+  "colors": "Black|White",
+  "models": "Standard|Pro",
+  "minimum_order_quantity": "",
+  "oem_available": "false",
+  "odm_available": "false",
+  "is_featured": "false",
+  "is_published": "false",
+  "specifications": "{\"Power\":\"\",\"Certification\":\"\"}"
+}
