@@ -5,14 +5,27 @@ import { escapeHtml, imageMarkup, slugify, toast } from './lib/dom.js';
 const app = document.querySelector('#app');
 const PAGE_SIZE = 12;
 const initialCategories = [
-  ['jewelry-accessories','Jewelry & Accessories','Jewelry, watches and fashion accessories','rose'],
-  ['apparel-footwear-bags','Apparel, Footwear & Bags','Clothing, shoes, bags and textiles','sand'],
-  ['electronics-accessories','Electronics & Accessories','Consumer electronics and components','blue'],
-  ['machinery-industrial-equipment','Machinery & Industrial Equipment','Industrial machinery, tools and equipment','mint'],
-  ['construction-building-materials','Construction & Building Materials','Building materials, hardware and fittings','gold'],
-  ['energy-storage-new-energy','Energy Storage & New Energy','Batteries, storage systems and solar equipment','green'],
-  ['furniture-home-furnishings','Furniture & Home Furnishings','Furniture, lighting and home décor','lilac'],
+  ['jewelry-accessories','Jewelry & Accessories','Jewelry, watches and fashion accessories'],
+  ['apparel-footwear-bags','Apparel, Footwear & Bags','Clothing, shoes, bags and textiles'],
+  ['shoes-footwear','Shoes & Footwear','Shoes, footwear and related accessories'],
+  ['clothing-apparel','Clothing & Apparel','Clothing, garments and fashion apparel'],
+  ['electronics-accessories','Electronics & Accessories','Consumer electronics and components'],
+  ['machinery-industrial-equipment','Machinery & Industrial Equipment','Industrial machinery, tools and equipment'],
+  ['construction-building-materials','Construction & Building Materials','Building materials, hardware and fittings'],
+  ['energy-storage-new-energy','Energy Storage & New Energy','Batteries, storage systems and solar equipment'],
+  ['furniture-home-furnishings','Furniture & Home Furnishings','Furniture, lighting and home décor'],
 ];
+const categoryCovers = Object.freeze({
+  'jewelry-accessories': { src: '/category-covers/jewelry-accessories.jpg', alt: 'Gold and silver jewelry, earrings, necklaces and a wristwatch on beige stone' },
+  'apparel-footwear-bags': { src: '/category-covers/apparel-footwear-bags.jpg', alt: 'Folded neutral garments, a leather handbag and white sneakers on warm stone' },
+  'shoes-footwear': { src: '/category-covers/shoes-footwear.jpg', alt: 'Leather loafers, a white sneaker and a taupe ankle boot on beige stone' },
+  'clothing-apparel': { src: '/category-covers/clothing-apparel.jpg', alt: 'Folded linen garments and a muted sage jacket in a natural-light studio' },
+  'electronics-accessories': { src: '/category-covers/electronics-accessories.jpg', alt: 'Unbranded smartphone, wireless earbuds, charger and smart home device' },
+  'machinery-industrial-equipment': { src: '/category-covers/machinery-industrial-equipment.jpg', alt: 'Precision benchtop CNC machine with a metal gear and caliper' },
+  'construction-building-materials': { src: '/category-covers/construction-building-materials.jpg', alt: 'Architectural stone, concrete, wood and metal building samples with a faucet' },
+  'energy-storage-new-energy': { src: '/category-covers/energy-storage-new-energy.jpg', alt: 'Home energy storage battery, solar panel and inverter' },
+  'furniture-home-furnishings': { src: '/category-covers/furniture-home-furnishings.jpg', alt: 'Oak accent chair, side table and ceramic lamp in a warm neutral interior' },
+});
 
 function header() {
   return `<header class="site-header"><a class="brand" href="#/" aria-label="China Sourcing Catalog home"><span class="brand-symbol">C</span><span>CHINA SOURCING<small>CATALOG</small></span></a><nav class="desktop-nav" aria-label="Main navigation"><a href="#/categories">Categories</a><a href="#/products">Products</a><a href="#/suppliers">Suppliers</a><a href="#/about">About</a></nav><a class="header-cta" href="#/inquiry">Contact Us <span aria-hidden="true">↗</span></a></header>`;
@@ -21,9 +34,12 @@ function footer() {
   return `<footer class="site-footer"><a class="brand" href="#/"><span class="brand-symbol">C</span><span>CHINA SOURCING<small>CATALOG</small></span></a><p>Discover Products. Connect with Suppliers.</p><span>© ${new Date().getFullYear()} China Sourcing Catalog</span></footer>`;
 }
 function shell(body) { app.innerHTML = header() + `<main>${body}</main>` + footer(); }
-function categoryCard(category, index = 0) {
-  const tone = ['rose','sand','blue','mint','gold','green','lilac'][index % 7];
-  return `<a class="category-card" href="#/products?category=${encodeURIComponent(category.slug)}"><div class="category-art ${tone}"><span class="category-number">${String(index + 1).padStart(2,'0')}</span><span class="category-monogram">${escapeHtml(category.name.charAt(0))}</span><span class="art-orbit"></span></div><div class="category-copy"><div><h3>${escapeHtml(category.name)}</h3><p>${escapeHtml(category.description || '')}</p></div><span class="arrow" aria-hidden="true">↗</span></div></a>`;
+function categoryCard(category) {
+  const cover = categoryCovers[category.slug];
+  const image = cover
+    ? `<img class="category-cover" src="${cover.src}" alt="${escapeHtml(cover.alt)}" loading="lazy" decoding="async" />`
+    : '';
+  return `<a class="category-card" href="#/products?category=${encodeURIComponent(category.slug)}"><div class="category-art">${image}</div><div class="category-copy"><div><h3>${escapeHtml(category.name)}</h3><p>${escapeHtml(category.description || '')}</p></div><span class="arrow" aria-hidden="true">↗</span></div></a>`;
 }
 function productCard(product, index = 0) {
   const image = product.product_images?.[0];
@@ -56,7 +72,7 @@ async function home() {
     document.querySelector('#home-categories').innerHTML = categories.length ? categories.map(categoryCard).join('') : `<p class="empty-inline">Product categories will appear here soon.</p>`;
     document.querySelector('#featured-products').innerHTML = products.length ? products.map(productCard).join('') : `<div class="empty-products"><div class="empty-icon">✳</div><h3>New finds are on the way.</h3><p>Featured products will appear here once the catalog is ready.</p><a class="button-dark" href="#/inquiry">Send a sourcing inquiry <span>→</span></a></div>`;
   } catch (error) {
-    document.querySelector('#home-categories').innerHTML = initialCategories.map(([slug,name,description], index) => categoryCard({ slug, name, description }, index)).join('');
+    document.querySelector('#home-categories').innerHTML = initialCategories.map(([slug,name,description]) => categoryCard({ slug, name, description })).join('');
     document.querySelector('#featured-products').innerHTML = catalogError(error);
   }
 }
