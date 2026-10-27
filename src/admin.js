@@ -2,14 +2,16 @@ import Papa from 'papaparse';
 import { requireSupabase } from './lib/supabase.js';
 import { escapeHtml, imageMarkup, slugify, toast } from './lib/dom.js';
 
-const SELECT = '*, categories(name,slug), product_images(id,storage_path,alt_text,sort_order)';
+const SELECT = '*, categories(name,slug), product_images(id,storage_path,alt_text,sort_order), supplier:suppliers(id,name,slug)';
 let currentProducts = [];
 let currentCategories = [];
+let currentSuppliers = [];
 let editingProduct = null;
 let editingCategory = null;
+let editingSupplier = null;
 
 function adminFrame(title, content, section = 'products') {
-  return `<section class="admin-page"><div class="admin-top"><div><p class="eyebrow">CATALOG MANAGEMENT</p><h1>${escapeHtml(title)}</h1></div><button class="button-light" id="admin-signout">Sign out</button></div><div class="admin-tabs"><button data-admin-section="products" class="${section==='products'?'active':''}">Products</button><button data-admin-section="categories" class="${section==='categories'?'active':''}">Categories</button><button data-admin-section="inquiries" class="${section==='inquiries'?'active':''}">Inquiries</button></div>${content}</section>`;
+  return `<section class="admin-page"><div class="admin-top"><div><p class="eyebrow">CATALOG MANAGEMENT</p><h1>${escapeHtml(title)}</h1></div><button class="button-light" id="admin-signout">Sign out</button></div><div class="admin-tabs"><button data-admin-section="products" class="${section==='products'?'active':''}">Products</button><button data-admin-section="suppliers" class="${section==='suppliers'?'active':''}">Suppliers</button><button data-admin-section="categories" class="${section==='categories'?'active':''}">Categories</button><button data-admin-section="inquiries" class="${section==='inquiries'?'active':''}">Inquiries</button></div>${content}</section>`;
 }
 function loginView(app, shell) {
   shell(`<section class="admin-login"><p class="eyebrow">PRIVATE ADMIN AREA</p><h1>Catalog <em>sign in.</em></h1><p>Sign in with an authorized catalog administrator account.</p><form id="admin-login-form" class="admin-login-form"><label>Email<input name="email" type="email" required autocomplete="username" /></label><label>Password<input name="password" type="password" required autocomplete="current-password" /></label><p class="form-error" id="login-error" role="alert"></p><button class="button-dark" type="submit">Sign In <span>→</span></button></form></section>`);
@@ -39,12 +41,19 @@ async function loadProducts() {
   const { data, error } = await requireSupabase().from('products').select(SELECT).order('updated_at', { ascending: false }).limit(100);
   if (error) throw error; currentProducts = data || []; return currentProducts;
 }
+async function loadSuppliers() {
+  const { data, error } = await requireSupabase().from('suppliers').select('*').order('updated_at', { ascending: false });
+  if (error) throw error; currentSuppliers = data || []; return currentSuppliers;
+}
 
 function productsView() {
   return adminFrame('Products', `<div class="admin-toolbar"><p>Manage catalog products. CSV/Excel import updates a product when its SKU matches.</p><div><button class="button-light" id="csv-import-button">Import CSV / Excel</button><button class="button-light" id="bulk-image-upload-button">Upload Images by SKU</button><button class="button-dark" id="new-product">Add Product <span>＋</span></button><input id="csv-file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden /><input id="bulk-image-file" type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple hidden /></div></div><div id="csv-report" class="import-report" hidden></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>${currentProducts.length ? currentProducts.map((product) => `<tr><td><b>${escapeHtml(product.name)}</b><small>${escapeHtml(product.short_description || '')}</small></td><td>${escapeHtml(product.sku)}</td><td>${escapeHtml(product.categories?.name || 'Uncategorized')}</td><td><span class="status-chip ${product.is_published?'published':''}">${product.is_published?'Published':'Draft'}</span></td><td class="table-actions"><button data-edit-product="${product.id}">Edit</button><button class="danger-action" data-delete-product="${product.id}">Delete</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty-table">No products yet. Add one or import a CSV file.</td></tr>'}</tbody></table></div><div id="admin-editor"></div>`, 'products');
 }
 function categoriesView() {
   return adminFrame('Categories', `<div class="admin-toolbar"><p>Categories are managed in the database and can be changed at any time.</p><button class="button-dark" id="new-category">Add Category <span>＋</span></button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Category</th><th>Slug</th><th>Order</th><th>Visibility</th><th></th></tr></thead><tbody>${currentCategories.length ? currentCategories.map((category) => `<tr><td><b>${escapeHtml(category.name)}</b><small>${escapeHtml(category.description || '')}</small></td><td>${escapeHtml(category.slug)}</td><td>${category.sort_order}</td><td><span class="status-chip ${category.is_active?'published':''}">${category.is_active?'Active':'Hidden'}</span></td><td class="table-actions"><button data-edit-category="${category.id}">Edit</button><button class="danger-action" data-delete-category="${category.id}">Delete</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty-table">No categories yet.</td></tr>'}</tbody></table></div><div id="category-editor"></div>`, 'categories');
+}
+function suppliersView() {
+  return adminFrame('Suppliers', `<div class="admin-toolbar"><p>Manage supplier profiles and choose whether each profile is visible to the public.</p><button class="button-dark" id="new-supplier">Add Supplier <span>＋</span></button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Supplier</th><th>Location</th><th>Contact</th><th>Trade Mode</th><th>Review / Visibility</th><th></th></tr></thead><tbody>${currentSuppliers.length ? currentSuppliers.map(supplier => `<tr><td><b>${escapeHtml(supplier.name)}</b><small>${escapeHtml(supplier.supplier_type.replaceAll('_',' '))}</small></td><td>${escapeHtml(supplier.location || '—')}</td><td>${escapeHtml(supplier.contact_email || supplier.whatsapp || supplier.contact_phone || '—')}</td><td>${escapeHtml(supplier.transaction_mode)}</td><td><span class="status-chip ${supplier.verification_status==='verified'?'published':''}">${escapeHtml(supplier.verification_status)}</span> <span class="status-chip ${supplier.is_published?'published':''}">${supplier.is_published?'Published':'Draft'}</span></td><td class="table-actions"><button data-edit-supplier="${supplier.id}">Edit / View</button><button class="danger-action" data-delete-supplier="${supplier.id}">Delete</button></td></tr>`).join('') : '<tr><td colspan="6" class="empty-table">No suppliers yet. Add a supplier profile to get started.</td></tr>'}</tbody></table></div><div id="supplier-editor"></div>`, 'suppliers');
 }
 async function inquiriesView() {
   const { data, error } = await requireSupabase().from('inquiries').select('*').order('created_at', { ascending: false }).limit(200);
@@ -65,10 +74,58 @@ function categoryEditor(category = null) {
     toast('Category saved.', 'success'); await renderSection('categories');
   };
 }
+function supplierEditor(supplier = null) {
+  editingSupplier = supplier?.id || null;
+  const target = document.querySelector('#supplier-editor');
+  target.innerHTML = `<form class="admin-form" id="supplier-form"><div class="form-heading"><h2>${supplier?'Edit / View':'Add'} Supplier</h2><button type="button" class="close-editor" id="close-supplier-editor">×</button></div><div class="form-grid"><label>Supplier Name <span>*</span><input name="name" required maxlength="180" value="${escapeHtml(supplier?.name || '')}" /></label><label>Public URL Slug<input name="slug" required maxlength="100" value="${escapeHtml(supplier?.slug || '')}" /></label><label>Location<input name="location" maxlength="180" value="${escapeHtml(supplier?.location || '')}" placeholder="City, Province, Country" /></label><label>Supplier Type<select name="supplier_type"><option value="manufacturer" ${supplier?.supplier_type==='manufacturer'?'selected':''}>Manufacturer</option><option value="trading_company" ${supplier?.supplier_type==='trading_company'?'selected':''}>Trading Company</option><option value="brand_owner" ${supplier?.supplier_type==='brand_owner'?'selected':''}>Brand Owner</option><option value="other" ${supplier?.supplier_type==='other'?'selected':''}>Other</option></select></label><label>Contact Name<input name="contact_name" maxlength="180" value="${escapeHtml(supplier?.contact_name || '')}" /></label><label>Contact Email<input name="contact_email" type="email" maxlength="254" value="${escapeHtml(supplier?.contact_email || '')}" /></label><label>Phone<input name="contact_phone" maxlength="80" value="${escapeHtml(supplier?.contact_phone || '')}" /></label><label>Website<input name="website" type="url" maxlength="500" value="${escapeHtml(supplier?.website || '')}" placeholder="https://example.com" /></label><label>WhatsApp<input name="whatsapp" maxlength="80" value="${escapeHtml(supplier?.whatsapp || '')}" placeholder="Country code and number" /></label><label>Transaction Mode<select name="transaction_mode"><option ${supplier?.transaction_mode==='B2B Wholesale'?'selected':''}>B2B Wholesale</option><option ${supplier?.transaction_mode==='B2C Retail'?'selected':''}>B2C Retail</option><option ${supplier?.transaction_mode==='Both'?'selected':''}>Both</option></select></label><label>Review Status<select name="verification_status"><option value="pending" ${supplier?.verification_status==='pending'?'selected':''}>Pending</option><option value="verified" ${supplier?.verification_status==='verified'?'selected':''}>Verified</option><option value="rejected" ${supplier?.verification_status==='rejected'?'selected':''}>Rejected</option></select></label><label class="full-field">Introduction<textarea name="introduction" rows="4">${escapeHtml(supplier?.introduction || '')}</textarea></label><label>Supplier Logo<input name="logo" type="file" accept="image/jpeg,image/png,image/webp,image/avif" /><small>Optional. Uses the existing catalog image bucket.</small></label><label class="checkbox-label"><input name="is_published" type="checkbox" ${supplier?.is_published?'checked':''} /> Publish supplier profile</label>${supplier?.logo_storage_path?`<div class="supplier-logo-preview">${imageMarkup(requireSupabase(),supplier.logo_storage_path,supplier.name,'')}</div>`:''}</div><p class="form-error" id="supplier-error" role="alert"></p><div class="form-actions"><button class="button-dark" type="submit">Save Supplier <span>→</span></button></div></form>`;
+  const form = target.querySelector('#supplier-form');
+  form.elements.name.addEventListener('input', () => { if (!form.elements.slug.dataset.touched) form.elements.slug.value = slugify(form.elements.name.value); });
+  form.elements.slug.addEventListener('input', () => form.elements.slug.dataset.touched = 'true');
+  target.querySelector('#close-supplier-editor').onclick = () => { target.innerHTML = ''; editingSupplier = null; };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const button = form.querySelector('[type="submit"]'); const errorNode = form.querySelector('#supplier-error');
+    button.disabled = true; errorNode.textContent = '';
+    const record = {
+      name: form.elements.name.value.trim(), slug: slugify(form.elements.slug.value),
+      introduction: form.elements.introduction.value.trim(), location: form.elements.location.value.trim(),
+      supplier_type: form.elements.supplier_type.value, contact_name: form.elements.contact_name.value.trim(),
+      contact_email: form.elements.contact_email.value.trim(), contact_phone: form.elements.contact_phone.value.trim(),
+      website: form.elements.website.value.trim(), whatsapp: form.elements.whatsapp.value.trim(),
+      transaction_mode: form.elements.transaction_mode.value, verification_status: form.elements.verification_status.value,
+      is_published: form.elements.is_published.checked,
+    };
+    try {
+      const db = requireSupabase();
+      const saved = editingSupplier
+        ? await db.from('suppliers').update(record).eq('id', editingSupplier).select('*').single()
+        : await db.from('suppliers').insert(record).select('*').single();
+      if (saved.error) throw saved.error;
+      let logoPath = saved.data.logo_storage_path || supplier?.logo_storage_path || null;
+      const file = form.elements.logo.files?.[0];
+      if (file) {
+        if (file.size > 8 * 1024 * 1024) throw new Error('The logo exceeds the 8 MB upload limit. Supplier details were saved.');
+        const blob = await compressImage(file);
+        const newPath = `suppliers/${saved.data.id}/${crypto.randomUUID()}.webp`;
+        const upload = await db.storage.from('catalog-products').upload(newPath, blob, { contentType: blob.type || 'image/webp', upsert: false });
+        if (upload.error) throw new Error(`Supplier details were saved, but the logo upload failed: ${upload.error.message}`);
+        const updated = await db.from('suppliers').update({ logo_storage_path: newPath }).eq('id', saved.data.id);
+        if (updated.error) { await db.storage.from('catalog-products').remove([newPath]); throw new Error(`Supplier details were saved, but the logo path could not be saved: ${updated.error.message}`); }
+        logoPath = newPath;
+        if (saved.data.logo_storage_path && saved.data.logo_storage_path !== newPath) await db.storage.from('catalog-products').remove([saved.data.logo_storage_path]);
+      }
+      toast('Supplier saved.', 'success');
+      await renderSection('suppliers');
+      if (!file && logoPath && !saved.data.logo_storage_path) console.warn('Existing supplier logo path unexpectedly missing from returned row.');
+    } catch (error) {
+      errorNode.textContent = error.message || 'Supplier could not be saved.';
+    } finally { button.disabled = false; }
+  };
+}
 function productEditor(product = null) {
   editingProduct = product?.id || null;
   const target = document.querySelector('#admin-editor');
-  target.innerHTML = `<form class="admin-form product-admin-form" id="product-form"><div class="form-heading"><h2>${product?'Edit':'Add'} Product</h2><button type="button" class="close-editor" id="close-product-editor">×</button></div><div class="form-grid"><label>Product Name <span>*</span><input name="name" required maxlength="180" value="${escapeHtml(product?.name || '')}" /></label><label>SKU <span>*</span><input name="sku" required maxlength="80" value="${escapeHtml(product?.sku || '')}" placeholder="e.g. CS-1001" /></label><label>Slug<input name="slug" value="${escapeHtml(product?.slug || '')}" /></label><label>Category<select name="category_id"><option value="">Uncategorized</option>${currentCategories.map((category)=>`<option value="${category.id}" ${product?.category_id===category.id?'selected':''}>${escapeHtml(category.name)}</option>`).join('')}</select></label><label class="full-field">Short Description<textarea name="short_description" maxlength="500" rows="2">${escapeHtml(product?.short_description || '')}</textarea></label><label class="full-field">Product Description<textarea name="description" rows="4">${escapeHtml(product?.description || '')}</textarea></label><label>Material<input name="materials" value="${escapeHtml(product?.materials || '')}" /></label><label>Dimensions<input name="dimensions" value="${escapeHtml(product?.dimensions || '')}" /></label><label>Colors (comma separated)<input name="colors" value="${escapeHtml(product?.colors?.join(', ') || '')}" /></label><label>Models (comma separated)<input name="models" value="${escapeHtml(product?.models?.join(', ') || '')}" /></label><label>Minimum Order Quantity<input name="minimum_order_quantity" type="number" min="1" value="${product?.minimum_order_quantity ?? ''}" /></label><label>Specifications (JSON)<textarea name="specifications" rows="3">${escapeHtml(JSON.stringify(product?.specifications || {}, null, 2))}</textarea></label><label>OEM Availability<select name="oem_available"><option value="">Not provided</option><option value="true" ${product?.oem_available===true?'selected':''}>Available</option><option value="false" ${product?.oem_available===false?'selected':''}>Not available</option></select></label><label>ODM Availability<select name="odm_available"><option value="">Not provided</option><option value="true" ${product?.odm_available===true?'selected':''}>Available</option><option value="false" ${product?.odm_available===false?'selected':''}>Not available</option></select></label><div class="check-row"><label class="checkbox-label"><input name="is_featured" type="checkbox" ${product?.is_featured?'checked':''} /> Featured</label><label class="checkbox-label"><input name="is_published" type="checkbox" ${product?.is_published?'checked':''} /> Published</label></div></div><p class="form-error" id="product-error"></p><div class="form-actions"><button class="button-dark" type="submit">Save Product <span>→</span></button>${product?'<button type="button" class="button-light" id="open-images">Manage Images</button>':''}</div></form><div id="image-editor"></div>`;
+  target.innerHTML = `<form class="admin-form product-admin-form" id="product-form"><div class="form-heading"><h2>${product?'Edit':'Add'} Product</h2><button type="button" class="close-editor" id="close-product-editor">×</button></div><div class="form-grid"><label>Product Name <span>*</span><input name="name" required maxlength="180" value="${escapeHtml(product?.name || '')}" /></label><label>SKU <span>*</span><input name="sku" required maxlength="80" value="${escapeHtml(product?.sku || '')}" placeholder="e.g. CS-1001" /></label><label>Slug<input name="slug" value="${escapeHtml(product?.slug || '')}" /></label><label>Category<select name="category_id"><option value="">Uncategorized</option>${currentCategories.map((category)=>`<option value="${category.id}" ${product?.category_id===category.id?'selected':''}>${escapeHtml(category.name)}</option>`).join('')}</select></label><label>Supplier<select name="supplier_id"><option value="">No supplier linked</option>${currentSuppliers.map(supplier=>`<option value="${supplier.id}" ${product?.supplier_id===supplier.id?'selected':''}>${escapeHtml(supplier.name)}${supplier.is_published?'':' (Draft)'}</option>`).join('')}</select></label><label class="full-field">Short Description<textarea name="short_description" maxlength="500" rows="2">${escapeHtml(product?.short_description || '')}</textarea></label><label class="full-field">Product Description<textarea name="description" rows="4">${escapeHtml(product?.description || '')}</textarea></label><label>Material<input name="materials" value="${escapeHtml(product?.materials || '')}" /></label><label>Dimensions<input name="dimensions" value="${escapeHtml(product?.dimensions || '')}" /></label><label>Colors (comma separated)<input name="colors" value="${escapeHtml(product?.colors?.join(', ') || '')}" /></label><label>Models (comma separated)<input name="models" value="${escapeHtml(product?.models?.join(', ') || '')}" /></label><label>Minimum Order Quantity<input name="minimum_order_quantity" type="number" min="1" value="${product?.minimum_order_quantity ?? ''}" /></label><label>Specifications (JSON)<textarea name="specifications" rows="3">${escapeHtml(JSON.stringify(product?.specifications || {}, null, 2))}</textarea></label><label>OEM Availability<select name="oem_available"><option value="">Not provided</option><option value="true" ${product?.oem_available===true?'selected':''}>Available</option><option value="false" ${product?.oem_available===false?'selected':''}>Not available</option></select></label><label>ODM Availability<select name="odm_available"><option value="">Not provided</option><option value="true" ${product?.odm_available===true?'selected':''}>Available</option><option value="false" ${product?.odm_available===false?'selected':''}>Not available</option></select></label><div class="check-row"><label class="checkbox-label"><input name="is_featured" type="checkbox" ${product?.is_featured?'checked':''} /> Featured</label><label class="checkbox-label"><input name="is_published" type="checkbox" ${product?.is_published?'checked':''} /> Published</label></div></div><p class="form-error" id="product-error"></p><div class="form-actions"><button class="button-dark" type="submit">Save Product <span>→</span></button>${product?'<button type="button" class="button-light" id="open-images">Manage Images</button>':''}</div></form><div id="image-editor"></div>`;
   const form = target.querySelector('#product-form'); form.elements.name.addEventListener('input', () => { if (!editingProduct || !form.elements.slug.dataset.touched) form.elements.slug.value=slugify(form.elements.name.value); }); form.elements.slug.addEventListener('input',()=>form.elements.slug.dataset.touched='true');
   target.querySelector('#close-product-editor').onclick = () => { target.innerHTML=''; editingProduct=null; };
   form.onsubmit = async (event) => {
@@ -77,7 +134,7 @@ function productEditor(product = null) {
     try { specifications = form.elements.specifications.value.trim() ? JSON.parse(form.elements.specifications.value) : {}; if (!specifications || Array.isArray(specifications) || typeof specifications !== 'object') throw new Error(); }
     catch { target.querySelector('#product-error').textContent='Specifications must be a valid JSON object.'; return; }
     const sku = form.elements.sku.value.trim().toUpperCase();
-    const record = { name: form.elements.name.value.trim(), sku, slug: slugify(form.elements.slug.value || `${form.elements.name.value}-${sku}`), category_id: form.elements.category_id.value || null, short_description: form.elements.short_description.value.trim(), description: form.elements.description.value.trim(), materials: form.elements.materials.value.trim() || null, dimensions: form.elements.dimensions.value.trim() || null, colors: form.elements.colors.value.split(',').map(x=>x.trim()).filter(Boolean), models: form.elements.models.value.split(',').map(x=>x.trim()).filter(Boolean), minimum_order_quantity: form.elements.minimum_order_quantity.value ? Number(form.elements.minimum_order_quantity.value) : null, oem_available: form.elements.oem_available.value===''?null:form.elements.oem_available.value==='true', odm_available: form.elements.odm_available.value===''?null:form.elements.odm_available.value==='true', is_featured: form.elements.is_featured.checked, is_published: form.elements.is_published.checked, specifications };
+    const record = { name: form.elements.name.value.trim(), sku, slug: slugify(form.elements.slug.value || `${form.elements.name.value}-${sku}`), category_id: form.elements.category_id.value || null, supplier_id: form.elements.supplier_id.value || null, short_description: form.elements.short_description.value.trim(), description: form.elements.description.value.trim(), materials: form.elements.materials.value.trim() || null, dimensions: form.elements.dimensions.value.trim() || null, colors: form.elements.colors.value.split(',').map(x=>x.trim()).filter(Boolean), models: form.elements.models.value.split(',').map(x=>x.trim()).filter(Boolean), minimum_order_quantity: form.elements.minimum_order_quantity.value ? Number(form.elements.minimum_order_quantity.value) : null, oem_available: form.elements.oem_available.value===''?null:form.elements.oem_available.value==='true', odm_available: form.elements.odm_available.value===''?null:form.elements.odm_available.value==='true', is_featured: form.elements.is_featured.checked, is_published: form.elements.is_published.checked, specifications };
     const query = requireSupabase().from('products'); const result = editingProduct ? await query.update(record).eq('id',editingProduct).select('id').single() : await query.insert(record).select('id').single();
     if(result.error){target.querySelector('#product-error').textContent=result.error.message;return;}
     toast('Product saved.', 'success'); await renderSection('products');
@@ -100,48 +157,66 @@ async function imageEditor(product) {
 async function compressImage(file){const bitmap=await createImageBitmap(file);const scale=Math.min(1,1800/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();return await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Image processing failed.')),'image/webp',0.84));}
 
 async function importCsv(file) {
-  const report=document.querySelector('#csv-report'); report.hidden=false; report.textContent='Reading CSV…';
+  const report = document.querySelector('#csv-report'); report.hidden = false; report.textContent = 'Reading CSV…';
   let parsed;
   if (/\.xlsx?$/i.test(file.name)) {
     try {
       const { default: ExcelJS } = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(new Uint8Array(await file.arrayBuffer()));
-      const sheet = workbook.worksheets[0];
-      if (!sheet) throw new Error('Workbook has no worksheet.');
-      const headers = sheet.getRow(1).values.slice(1).map(value => String(value ?? '').trim().toLowerCase());
-      const rows = [];
-      sheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        const record = {};
-        headers.forEach((header, index) => { if (header) record[header] = String(row.getCell(index + 1).text ?? '').trim(); });
-        if (Object.values(record).some(value => value !== '')) rows.push(record);
-      });
+      const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(new Uint8Array(await file.arrayBuffer()));
+      const sheet = workbook.worksheets[0]; if (!sheet) throw new Error('Workbook has no worksheet.');
+      const headers = sheet.getRow(1).values.slice(1).map(value => String(value ?? '').trim().toLowerCase()); const rows = [];
+      sheet.eachRow((row, rowNumber) => { if (rowNumber === 1) return; const record = {}; headers.forEach((header, index) => { if (header) record[header] = String(row.getCell(index + 1).text ?? '').trim(); }); if (Object.values(record).some(value => value !== '')) rows.push(record); });
       parsed = { data: rows, errors: [] };
     } catch { parsed = { data: [], errors: [{ row: 0, message: 'Could not read the XLSX workbook.' }] }; }
-  } else {
-    parsed = Papa.parse(file,{header:true,skipEmptyLines:'greedy',transformHeader:header=>header.trim().toLowerCase()});
-  }
-  if(parsed.errors.length){report.textContent=`CSV parsing error: ${parsed.errors.slice(0,5).map(e=>`row ${e.row+1}: ${e.message}`).join('; ')}`;return;}
-  const categories=await loadCategories();const categoryBySlug=new Map(categories.map(c=>[c.slug,c.id]));const seen=new Set();const valid=[];const errors=[];
-  parsed.data.forEach((row,index)=>{const rowNumber=index+2;const sku=String(row.sku||'').trim().toUpperCase();const name=String(row.name||'').trim();if(!sku||!name){errors.push(`Row ${rowNumber}: SKU and name are required.`);return;}if(seen.has(sku)){errors.push(`Row ${rowNumber}: duplicate SKU ${sku} in this file; the first row is kept.`);return;}seen.add(sku);const categorySlug=String(row.category_slug||'').trim();if(categorySlug&&!categoryBySlug.has(categorySlug)){errors.push(`Row ${rowNumber}: unknown category_slug ${categorySlug}.`);return;}let specifications={};if(row.specifications){try{specifications=JSON.parse(row.specifications);if(!specifications||Array.isArray(specifications)||typeof specifications!=='object')throw new Error();}catch{errors.push(`Row ${rowNumber}: specifications must be a JSON object.`);return;}}
-    const boolean=(value)=>String(value||'').toLowerCase()==='true'||String(value||'')==='1';const quantity=String(row.minimum_order_quantity||'').trim();if(quantity&&(!/^\d+$/.test(quantity)||Number(quantity)<1)){errors.push(`Row ${rowNumber}: minimum_order_quantity must be a positive integer.`);return;}
-    valid.push({sku,name,slug:slugify(row.slug||`${name}-${sku}`),category_id:categorySlug?categoryBySlug.get(categorySlug):null,short_description:String(row.short_description||''),description:String(row.description||''),materials:String(row.materials||'')||null,dimensions:String(row.dimensions||'')||null,colors:String(row.colors||'').split('|').map(x=>x.trim()).filter(Boolean),models:String(row.models||'').split('|').map(x=>x.trim()).filter(Boolean),minimum_order_quantity:quantity?Number(quantity):null,oem_available:row.oem_available===''?null:boolean(row.oem_available),odm_available:row.odm_available===''?null:boolean(row.odm_available),is_featured:boolean(row.is_featured),is_published:boolean(row.is_published),specifications});
+  } else parsed = Papa.parse(file, { header: true, skipEmptyLines: 'greedy', transformHeader: header => header.trim().toLowerCase() });
+  if (parsed.errors.length) { report.textContent = `CSV parsing error: ${parsed.errors.slice(0, 5).map(error => `row ${error.row + 1}: ${error.message}`).join('; ')}`; return; }
+
+  const categories = await loadCategories(); const categoryBySlug = new Map(categories.map(category => [category.slug, category.id]));
+  const hasSupplierColumn = parsed.data.some(row => Object.hasOwn(row, 'supplier_slug'));
+  const suppliers = hasSupplierColumn ? await loadSuppliers() : [];
+  const supplierBySlug = new Map(suppliers.map(supplier => [supplier.slug, supplier.id]));
+  const seen = new Set(); const valid = []; const errors = [];
+  parsed.data.forEach((row, index) => {
+    const rowNumber = index + 2; const sku = String(row.sku || '').trim().toUpperCase(); const name = String(row.name || '').trim();
+    if (!sku || !name) { errors.push(`Row ${rowNumber}: SKU and name are required.`); return; }
+    if (seen.has(sku)) { errors.push(`Row ${rowNumber}: duplicate SKU ${sku} in this file; the first row is kept.`); return; }
+    seen.add(sku);
+    const categorySlug = String(row.category_slug || '').trim();
+    if (categorySlug && !categoryBySlug.has(categorySlug)) { errors.push(`Row ${rowNumber}: unknown category_slug ${categorySlug}.`); return; }
+    const supplierSlug = String(row.supplier_slug || '').trim().toLowerCase();
+    if (supplierSlug && !supplierBySlug.has(supplierSlug)) { errors.push(`Row ${rowNumber}: unknown supplier_slug ${supplierSlug}.`); return; }
+    let specifications = {};
+    if (row.specifications) { try { specifications = JSON.parse(row.specifications); if (!specifications || Array.isArray(specifications) || typeof specifications !== 'object') throw new Error(); } catch { errors.push(`Row ${rowNumber}: specifications must be a valid JSON object.`); return; } }
+    const boolean = value => String(value || '').toLowerCase() === 'true' || String(value || '') === '1';
+    const quantity = String(row.minimum_order_quantity || '').trim();
+    if (quantity && (!/^\d+$/.test(quantity) || Number(quantity) < 1)) { errors.push(`Row ${rowNumber}: minimum_order_quantity must be a positive integer.`); return; }
+    const product = { sku, name, slug: slugify(row.slug || `${name}-${sku}`), category_id: categorySlug ? categoryBySlug.get(categorySlug) : null, short_description: String(row.short_description || ''), description: String(row.description || ''), materials: String(row.materials || '') || null, dimensions: String(row.dimensions || '') || null, colors: String(row.colors || '').split('|').map(value => value.trim()).filter(Boolean), models: String(row.models || '').split('|').map(value => value.trim()).filter(Boolean), minimum_order_quantity: quantity ? Number(quantity) : null, oem_available: row.oem_available === '' ? null : boolean(row.oem_available), odm_available: row.odm_available === '' ? null : boolean(row.odm_available), is_featured: boolean(row.is_featured), is_published: boolean(row.is_published), specifications };
+    if (hasSupplierColumn && supplierSlug) product.supplier_id = supplierBySlug.get(supplierSlug);
+    valid.push({ product, rowNumber });
   });
   if (!valid.length) { report.textContent = `Nothing imported. ${errors.length} row issue(s) found.`; return; }
-  const existingSkus = new Set();
-  for (let start=0;start<valid.length;start+=500) {
-    const keys=valid.slice(start,start+500).map(item=>item.sku);
-    const {data,error}=await requireSupabase().from('products').select('sku').in('sku',keys);
-    if(error) throw error;
-    for(const row of data||[])existingSkus.add(row.sku);
+
+  const existingSkus = new Set(); const existingSupplierIds = new Map();
+  for (let start = 0; start < valid.length; start += 500) {
+    const keys = valid.slice(start, start + 500).map(item => item.product.sku);
+    const { data, error } = await requireSupabase().from('products').select('sku,supplier_id').in('sku', keys);
+    if (error) throw error; for (const row of data || []) { existingSkus.add(row.sku); existingSupplierIds.set(row.sku, row.supplier_id); }
   }
+  if (hasSupplierColumn) for (const item of valid) if (!Object.hasOwn(item.product, 'supplier_id')) item.product.supplier_id = existingSupplierIds.get(item.product.sku) || null;
   if (existingSkus.size && !confirm(`${existingSkus.size} SKU(s) already exist. Their catalog fields will be replaced by the matching spreadsheet rows. Continue?`)) {
-    report.textContent = `Import cancelled. No product records were changed. ${errors.length} row issue(s) were found during validation.`;
-    return;
+    report.textContent = `Import cancelled. No product records were changed. ${errors.length} row issue(s) were found during validation.`; return;
   }
-  let imported=0;for(let start=0;start<valid.length;start+=50){const batch=valid.slice(start,start+50);const result=await requireSupabase().from('products').upsert(batch,{onConflict:'sku'});if(!result.error){imported+=batch.length;continue;}for(let i=0;i<batch.length;i++){const single=await requireSupabase().from('products').upsert(batch[i],{onConflict:'sku'});if(single.error)errors.push(`CSV row ${start+i+2}: ${single.error.message}`);else imported++;}}
-  report.innerHTML=`<b>Import complete: ${imported} saved, ${errors.length} issue(s).</b>${errors.length?`<ul>${errors.map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul>`:''}`;await renderSection('products');document.querySelector('#csv-report').hidden=false;document.querySelector('#csv-report').innerHTML=`<b>Import complete: ${imported} saved, ${errors.length} issue(s).</b>${errors.length?`<ul>${errors.map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul>`:''}`;
+  let imported = 0;
+  for (let start = 0; start < valid.length; start += 50) {
+    const batch = valid.slice(start, start + 50); const result = await requireSupabase().from('products').upsert(batch.map(item => item.product), { onConflict: 'sku' });
+    if (!result.error) { imported += batch.length; continue; }
+    for (const item of batch) {
+      const single = await requireSupabase().from('products').upsert(item.product, { onConflict: 'sku' });
+      if (single.error) errors.push(`CSV row ${item.rowNumber}: ${single.error.message}`); else imported++;
+    }
+  }
+  const message = `<b>Import complete: ${imported} saved, ${errors.length} issue(s).</b>${errors.length ? `<ul>${errors.map(error => `<li>${escapeHtml(error)}</li>`).join('')}</ul>` : ''}`;
+  await renderSection('products'); const finalReport = document.querySelector('#csv-report'); finalReport.hidden = false; finalReport.innerHTML = message;
 }
 
 async function bulkImportImages(files) {
@@ -179,9 +254,29 @@ function wireCategorySection() {
 
 async function renderSection(section) {
   if(section==='categories') { await loadCategories(); document.querySelector('main').innerHTML=categoriesView(); wireCategorySection(); }
+  else if(section==='suppliers') { await loadSuppliers(); document.querySelector('main').innerHTML=suppliersView(); wireSupplierSection(); }
   else if(section==='inquiries') { document.querySelector('main').innerHTML=await inquiriesView(); }
   else { await loadCategories(); await loadProducts(); document.querySelector('main').innerHTML=productsView(); wireProductSection(); }
   wireAdminNav();
+}
+function wireSupplierSection() {
+  document.querySelector('#new-supplier').onclick = () => supplierEditor();
+  document.querySelectorAll('[data-edit-supplier]').forEach(button => button.onclick = () => {
+    const supplier = currentSuppliers.find(item => item.id === button.dataset.editSupplier);
+    if (supplier) supplierEditor(supplier);
+  });
+  document.querySelectorAll('[data-delete-supplier]').forEach(button => button.onclick = async () => {
+    const supplier = currentSuppliers.find(item => item.id === button.dataset.deleteSupplier);
+    if (!supplier || !confirm(`Delete ${supplier.name}? Linked products and product images will be kept without a supplier.`)) return;
+    const result = await requireSupabase().from('suppliers').delete().eq('id', supplier.id);
+    if (result.error) { toast(result.error.message, 'error'); return; }
+    if (supplier.logo_storage_path) {
+      const removed = await requireSupabase().storage.from('catalog-products').remove([supplier.logo_storage_path]);
+      if (removed.error) toast(`Supplier deleted. Logo cleanup failed: ${removed.error.message}`, 'error');
+      else toast('Supplier deleted. Linked products were kept.', 'success');
+    } else toast('Supplier deleted. Linked products were kept.', 'success');
+    await renderSection('suppliers');
+  });
 }
 function wireAdminNav(){
   document.querySelectorAll('[data-admin-section]').forEach(button=>button.onclick=()=>renderSection(button.dataset.adminSection));
@@ -193,7 +288,7 @@ export async function renderAdmin(app, { shell }) {
     if (!requireSupabase()) throw new Error('');
     const user=await authorizedUser();
     if(!user){await requireSupabase().auth.signOut();loginView(app,shell);return;}
-    await loadCategories(); await loadProducts();
+    await loadCategories(); await loadSuppliers(); await loadProducts();
     app.querySelector('main').innerHTML=productsView();wireProductSection();wireAdminNav();
     document.querySelectorAll('[data-admin-section]').forEach(button=>button.onclick=()=>renderSection(button.dataset.adminSection));
   } catch(error) { shell(`<section class="admin-login"><p class="eyebrow">PRIVATE ADMIN AREA</p><h1>Setup <em>required.</em></h1><p>${escapeHtml(error.message||'The admin area is unavailable until Supabase is configured.')}</p></section>`); }

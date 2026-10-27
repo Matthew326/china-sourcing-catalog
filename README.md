@@ -4,15 +4,16 @@ An English-only B2B product showcase and sourcing inquiry website for overseas b
 
 ## Project status
 
-The project was created from scratch in `D:\电子目录` because that folder was empty and the previously open `AI trading` folder belongs to a different application. The first working version includes:
+The site is an English-language B2B catalog for overseas buyers. It includes:
 
 - Responsive home, category, searchable product list, and product detail pages.
 - Supabase-backed catalog reads for active categories and published products.
 - Product inquiry form routed through a Supabase Edge Function.
 - Protected admin sign-in, product and category management, inquiry viewing, CSV/Excel import, and product image uploads.
-- Additive database migration with Row Level Security and seven initial categories.
+- Supplier profile management, supplier directory and detail pages, and optional supplier-to-product associations.
+- Additive Supabase migrations with Row Level Security and initial catalog categories.
 
-No product or supplier records have been invented. The seven category cards shown before Supabase is connected are temporary display fallbacks; the database seed and admin area become the source of truth once configured.
+No product or supplier records have been invented. Category fallback cards shown before Supabase is connected are temporary display content; database records become the source of truth once configured.
 
 ## Local development
 
@@ -36,7 +37,7 @@ A legacy anon key can also be used as `VITE_SUPABASE_ANON_KEY`. These browser ke
 ## Supabase setup
 
 1. Create or select the Supabase project intended for this catalog.
-2. Run `supabase/migrations/202610260001_catalog_schema.sql` once in the Supabase SQL Editor. The migration is additive and does not drop existing data. It creates the catalog tables, indexes, policies, the public image bucket, and the inquiry validation/rate-limit function.
+2. If the catalog schema has not already been installed, run `supabase/migrations/202610260001_catalog_schema.sql` in the Supabase SQL Editor. Then run `supabase/migrations/202610260002_suppliers.sql`. The supplier migration is additive: it creates `suppliers`, adds nullable `products.supplier_id` with `ON DELETE SET NULL`, seeds two apparel subcategories, and adds RLS policies. It does not delete or rewrite existing product or image rows; existing products remain unassigned until linked by an admin.
 3. In Supabase Auth, create the first admin user. Then add only that user's UUID to `public.admin_users` using the SQL Editor:
 
    ```sql
@@ -65,10 +66,11 @@ Open `/#/admin`, sign in, and choose **Import CSV / Excel**. The importer reads 
 Supported columns:
 
 - Required: `sku`, `name`
-- Optional: `category_slug`, `slug`, `short_description`, `description`, `materials`, `dimensions`, `colors`, `models`, `minimum_order_quantity`, `oem_available`, `odm_available`, `is_featured`, `is_published`, `specifications`
+- Optional: `category_slug`, `supplier_slug`, `slug`, `short_description`, `description`, `materials`, `dimensions`, `colors`, `models`, `minimum_order_quantity`, `oem_available`, `odm_available`, `is_featured`, `is_published`, `specifications`
 - Separate multiple colors/models with `|`.
 - `specifications` may be a JSON object, for example `{"Voltage":"220V"}`.
 - Category slugs must already exist. A repeated SKU in a file is reported and later duplicates are skipped. An existing SKU is updated; imported records stay unpublished unless `is_published` is true.
+- If present, `supplier_slug` must match a supplier profile. Omitting the column keeps existing product-supplier links unchanged; a blank value leaves an existing link unchanged and leaves a new product unassigned.
 - Validation and row-level failures are displayed after import. SKU values are normalized to uppercase.
 
 ## Product image workflow
@@ -80,8 +82,10 @@ Product images use the public `catalog-products` Supabase Storage bucket; image 
 - Uploads are limited to 8 MB each and resized to a maximum 1800 px edge, then encoded as WebP where supported. If an image fails to load on the site, a placeholder is shown.
 - Image files and product text records are stored and updated separately.
 
+Supplier logos reuse the `catalog-products` bucket and are stored below `suppliers/<supplier-id>/`. The supplier record stores only the image path. Supplier profiles appear publicly only after publication; the `Verified` label is shown only when an admin sets the review status to `verified`.
+
 ## Vercel and GitHub
 
-The Vite production build is `npm run build`; Vercel's output directory is `dist`. The app uses hash-based routes, so client pages do not need server rewrites. Create or select the intended GitHub repository, push this folder, then import it into the existing Vercel project and set the public Supabase variables there. No GitHub remote, Supabase project, or Vercel deployment has been linked from this workspace yet.
+The Vite production build is `npm run build`; Vercel's output directory is `dist`. The app uses hash-based routes, so client pages do not need server rewrites. Set the public Supabase variables in the existing Vercel project before deploying the updated application.
 
 Do not commit `.env.local`, `supabase/functions/.env`, or any Supabase secret keys. `.gitignore` excludes local environment files and build output.

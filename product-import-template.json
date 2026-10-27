@@ -2,6 +2,7 @@
   "sku": "CS-1001",
   "name": "Sample Product Name",
   "category_slug": "jewelry-accessories",
+  "supplier_slug": "",
   "slug": "sample-product-name",
   "short_description": "Short summary for the product card.",
   "description": "Full product description.",

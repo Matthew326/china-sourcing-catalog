@@ -1,0 +1,4 @@
+project_id = "china-sourcing-catalog"
+
+[functions.submit-inquiry]
+verify_jwt = false

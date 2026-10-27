@@ -1,4 +1,4 @@
-sku,name,category_slug,slug,short_description,description,materials,dimensions,colors,models,minimum_order_quantity,oem_available,odm_available,is_featured,is_published,specifications
-CS-1001,Sample Product Name,jewelry-accessories,sample-product-name,Short summary,Full description,,,,,,false,false,false,false,
+sku,name,category_slug,supplier_slug,slug,short_description,description,materials,dimensions,colors,models,minimum_order_quantity,oem_available,odm_available,is_featured,is_published,specifications
+CS-1001,Sample Product Name,jewelry-accessories,,sample-product-name,Short summary,Full description,,,,,,false,false,false,false,
 
 
