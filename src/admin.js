@@ -9,6 +9,13 @@ let currentSuppliers = [];
 let editingProduct = null;
 let editingCategory = null;
 let editingSupplier = null;
+let adminApp = null;
+
+function adminMain() {
+  const main = adminApp?.querySelector('main');
+  if (!main) throw new Error('The admin page could not initialize its content area. Reload the page and try again.');
+  return main;
+}
 
 function adminFrame(title, content, section = 'products') {
   return `<section class="admin-page"><div class="admin-top"><div><p class="eyebrow">CATALOG MANAGEMENT</p><h1>${escapeHtml(title)}</h1></div><button class="button-light" id="admin-signout">Sign out</button></div><div class="admin-tabs"><button data-admin-section="products" class="${section==='products'?'active':''}">Products</button><button data-admin-section="suppliers" class="${section==='suppliers'?'active':''}">Suppliers</button><button data-admin-section="categories" class="${section==='categories'?'active':''}">Categories</button><button data-admin-section="inquiries" class="${section==='inquiries'?'active':''}">Inquiries</button></div>${content}</section>`;
@@ -253,10 +260,10 @@ function wireCategorySection() {
 }
 
 async function renderSection(section) {
-  if(section==='categories') { await loadCategories(); document.querySelector('main').innerHTML=categoriesView(); wireCategorySection(); }
-  else if(section==='suppliers') { await loadSuppliers(); document.querySelector('main').innerHTML=suppliersView(); wireSupplierSection(); }
-  else if(section==='inquiries') { document.querySelector('main').innerHTML=await inquiriesView(); }
-  else { await loadCategories(); await loadProducts(); document.querySelector('main').innerHTML=productsView(); wireProductSection(); }
+  if(section==='categories') { await loadCategories(); adminMain().innerHTML=categoriesView(); wireCategorySection(); }
+  else if(section==='suppliers') { await loadSuppliers(); adminMain().innerHTML=suppliersView(); wireSupplierSection(); }
+  else if(section==='inquiries') { adminMain().innerHTML=await inquiriesView(); }
+  else { await loadCategories(); await loadProducts(); adminMain().innerHTML=productsView(); wireProductSection(); }
   wireAdminNav();
 }
 function wireSupplierSection() {
@@ -284,12 +291,16 @@ function wireAdminNav(){
 }
 
 export async function renderAdmin(app, { shell }) {
+  adminApp = app;
+  // A direct load of /#/admin starts with an empty #app, unlike route changes
+  // where another page may already have created <main> via shell().
+  shell('<section class="admin-loading"><p class="eyebrow">PRIVATE ADMIN AREA</p><p>Checking administrator access…</p></section>');
   try {
-    if (!requireSupabase()) throw new Error('');
+    requireSupabase();
     const user=await authorizedUser();
     if(!user){await requireSupabase().auth.signOut();loginView(app,shell);return;}
     await loadCategories(); await loadSuppliers(); await loadProducts();
-    app.querySelector('main').innerHTML=productsView();wireProductSection();wireAdminNav();
+    adminMain().innerHTML=productsView();wireProductSection();wireAdminNav();
     document.querySelectorAll('[data-admin-section]').forEach(button=>button.onclick=()=>renderSection(button.dataset.adminSection));
   } catch(error) { shell(`<section class="admin-login"><p class="eyebrow">PRIVATE ADMIN AREA</p><h1>Setup <em>required.</em></h1><p>${escapeHtml(error.message||'The admin area is unavailable until Supabase is configured.')}</p></section>`); }
 }
