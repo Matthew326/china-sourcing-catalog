@@ -3,7 +3,7 @@ export const slugify = (value = '') => String(value).toLowerCase().normalize('NF
 export const imageUrl = (supabase, path) => path ? supabase.storage.from('catalog-products').getPublicUrl(path).data.publicUrl : '';
 export const imageMarkup = (supabase, path, alt, extra = '') => {
   const url = imageUrl(supabase, path);
-  return url ? `<img class="${extra}" src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><div class="image-placeholder" hidden aria-hidden="true">Image unavailable</div>` : `<div class="image-placeholder" aria-label="No product image">Image coming soon</div>`;
+  return url ? `<img class="${extra}" src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" onload="this.hidden=false;this.nextElementSibling.hidden=true" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><div class="image-placeholder" hidden aria-hidden="true">Image unavailable</div>` : `<div class="image-placeholder" aria-label="No product image">Image coming soon</div>`;
 };
 export const toast = (message, type = 'info') => {
   let node = document.querySelector('#toast');
