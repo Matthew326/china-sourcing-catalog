@@ -175,7 +175,15 @@ async function importCsv(file) {
       sheet.eachRow((row, rowNumber) => { if (rowNumber === 1) return; const record = {}; headers.forEach((header, index) => { if (header) record[header] = String(row.getCell(index + 1).text ?? '').trim(); }); if (Object.values(record).some(value => value !== '')) rows.push(record); });
       parsed = { data: rows, errors: [] };
     } catch { parsed = { data: [], errors: [{ row: 0, message: 'Could not read the XLSX workbook.' }] }; }
-  } else parsed = Papa.parse(file, { header: true, skipEmptyLines: 'greedy', transformHeader: header => header.trim().toLowerCase() });
+  } else {
+    parsed = await new Promise((resolve, reject) => Papa.parse(file, {
+      header: true,
+      skipEmptyLines: 'greedy',
+      transformHeader: header => header.trim().toLowerCase(),
+      complete: resolve,
+      error: reject,
+    }));
+  }
   if (parsed.errors.length) { report.textContent = `CSV parsing error: ${parsed.errors.slice(0, 5).map(error => `row ${error.row + 1}: ${error.message}`).join('; ')}`; return; }
 
   const categories = await loadCategories(); const categoryBySlug = new Map(categories.map(category => [category.slug, category.id]));
@@ -249,7 +257,7 @@ function wireProductSection() {
   document.querySelector('#csv-import-button').onclick=()=>document.querySelector('#csv-file').click();
   document.querySelector('#bulk-image-upload-button').onclick=()=>document.querySelector('#bulk-image-file').click();
   document.querySelector('#bulk-image-file').onchange=async(event)=>{const files=[...(event.target.files||[])];if(files.length)try{await bulkImportImages(files);}catch(error){toast(error.message,'error');}};
-  document.querySelector('#csv-file').onchange=(event)=>{const file=event.target.files?.[0];if(file)importCsv(file).catch(error=>toast(error.message,'error'));};
+  document.querySelector('#csv-file').onchange=async(event)=>{const input=event.currentTarget;const file=input.files?.[0];if(!file)return;try{await importCsv(file);}catch(error){const report=document.querySelector('#csv-report');if(report){report.hidden=false;report.textContent=`CSV import failed: ${error.message||'Unexpected error.'}`;}toast(error.message||'CSV import failed.','error');}finally{input.value='';}};
   document.querySelectorAll('[data-edit-product]').forEach(button=>button.onclick=()=>{const product=currentProducts.find(p=>p.id===button.dataset.editProduct);if(product)productEditor(product);});
   document.querySelectorAll('[data-delete-product]').forEach(button=>button.onclick=async()=>{const product=currentProducts.find(p=>p.id===button.dataset.deleteProduct);if(!product||!confirm(`Delete ${product.name} and its product images?`))return;const paths=(product.product_images||[]).map(image=>image.storage_path);if(paths.length){const removed=await requireSupabase().storage.from('catalog-products').remove(paths);if(removed.error){toast(removed.error.message,'error');return;}}const result=await requireSupabase().from('products').delete().eq('id',product.id);if(result.error){toast(result.error.message,'error');return;}toast('Product deleted.','success');await renderSection('products');});
 }
